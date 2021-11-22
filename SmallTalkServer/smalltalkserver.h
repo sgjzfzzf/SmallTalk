@@ -11,7 +11,10 @@
 #include <QGridLayout>
 
 QT_BEGIN_NAMESPACE
-namespace Ui { class SmallTalkServer; }
+namespace Ui
+{
+    class SmallTalkServer;
+}
 QT_END_NAMESPACE
 
 class SmallTalkServer : public QDialog
@@ -21,15 +24,18 @@ class SmallTalkServer : public QDialog
 public:
     SmallTalkServer(QWidget *parent = nullptr);
     ~SmallTalkServer();
+    void updateClients(QString);
 
 public slots:
     void createOrDestoryRoomServer();
+    void handleNewConnection();
+    void handleNewData();
 
 private:
     Ui::SmallTalkServer *ui;
     int port;
     QTcpServer *serverSocket;
-    QList<QTcpSocket*> clientSockets;
+    QList<QTcpSocket *> clientSockets;
     QLabel *contentLabel;
     QListWidget *contentListWidget;
     QLabel *portLabel;

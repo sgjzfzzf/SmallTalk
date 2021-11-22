@@ -2,10 +2,13 @@
 #include "ui_smalltalkserver.h"
 #include <QMessageBox>
 #include <QHostAddress>
+#include <QTcpSocket>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 
 SmallTalkServer::SmallTalkServer(QWidget *parent)
-    : QDialog(parent)
-    , ui(new Ui::SmallTalkServer)
+    : QDialog(parent), ui(new Ui::SmallTalkServer)
 {
     ui->setupUi(this);
     serverSocket = new QTcpServer;
@@ -15,20 +18,38 @@ SmallTalkServer::SmallTalkServer(QWidget *parent)
     portEdit = new QLineEdit;
     portConfirmBtn = new QPushButton;
     mainLayout = new QGridLayout(this);
+
     contentLabel->setText(QString::fromLocal8Bit("聊天室内容"));
     portLabel->setText(QString::fromLocal8Bit("端口号"));
     portConfirmBtn->setText(QString::fromLocal8Bit("创建"));
+
     mainLayout->addWidget(contentLabel, 0, 0, 1, 3);
     mainLayout->addWidget(contentListWidget, 1, 0, 1, 3);
     mainLayout->addWidget(portLabel, 2, 0);
     mainLayout->addWidget(portEdit, 2, 1);
     mainLayout->addWidget(portConfirmBtn, 2, 2);
+
     connect(portConfirmBtn, SIGNAL(clicked()), this, SLOT(createOrDestoryRoomServer()));
+    connect(serverSocket, SIGNAL(newConnection()), this, SLOT(handleNewConnection()));
 }
 
 SmallTalkServer::~SmallTalkServer()
 {
     delete ui;
+}
+
+void SmallTalkServer::updateClients(QString msg)
+{
+    for (int i = 0; i < clientSockets.length(); ++i)
+    {
+        QJsonObject json;
+        json.insert("userName", "");
+        json.insert("contentType", "updateText");
+        json.insert("content", msg);
+        QJsonDocument document;
+        document.setObject(json);
+        clientSockets[i]->write(document.toJson());
+    }
 }
 
 void SmallTalkServer::createOrDestoryRoomServer()
@@ -52,5 +73,61 @@ void SmallTalkServer::createOrDestoryRoomServer()
     {
         serverSocket->close();
         portConfirmBtn->setText(QString::fromLocal8Bit("创建"));
+    }
+}
+
+void SmallTalkServer::handleNewConnection()
+{
+    QTcpSocket *clientSocket = serverSocket->nextPendingConnection();
+    clientSockets.append(clientSocket);
+    connect(clientSocket, SIGNAL(readyRead()), this, SLOT(handleNewData()));
+}
+
+void SmallTalkServer::handleNewData()
+{
+    QTcpSocket *clientSocket = (QTcpSocket *)sender();
+    QByteArray contentByteArray = clientSocket->readAll();
+    QJsonParseError error;
+    QJsonDocument document = QJsonDocument::fromJson(contentByteArray, &error);
+    if (document.isNull() || (error.error != QJsonParseError::NoError))
+    {
+        //Receive error json.
+        return;
+    }
+    QJsonObject json = document.object();
+    QString userName, contentType, content;
+    if (json.contains("userName"))
+    {
+        userName = json.value("userName").toString();
+    }
+    else
+    {
+        return;
+    }
+    if (json.contains("contentType"))
+    {
+        contentType = json.value("contentType").toString();
+    }
+    else
+    {
+        return;
+    }
+    if (json.contains("content"))
+    {
+        content = json.value("content").toString();
+    }
+    else
+    {
+        return;
+    }
+    if (contentType == "text")
+    {
+        QString msg = userName + ":" + content;
+        contentListWidget->addItem(msg);
+        updateClients(msg);
+    }
+    else if (contentType == "file")
+    {
+        //TODO:finish file process part
     }
 }

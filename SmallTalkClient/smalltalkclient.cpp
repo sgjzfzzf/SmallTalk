@@ -2,10 +2,11 @@
 #include "ui_smalltalkclient.h"
 #include <QMessageBox>
 #include <QFileDialog>
+#include <QJsonObject>
+#include <QJsonDocument>
 
 SmallTalkClient::SmallTalkClient(QWidget *parent)
-    : QDialog(parent)
-    , ui(new Ui::SmallTalkClient)
+    : QDialog(parent), ui(new Ui::SmallTalkClient)
 {
     ui->setupUi(this);
     clientSocket = new QTcpSocket;
@@ -19,6 +20,8 @@ SmallTalkClient::SmallTalkClient(QWidget *parent)
     addressEdit = new QLineEdit;
     portLabel = new QLabel;
     portEdit = new QLineEdit;
+    userNameLabel = new QLabel;
+    userNameEdit = new QLineEdit;
     connectBtn = new QPushButton;
     mainLayout = new QGridLayout(this);
 
@@ -30,6 +33,7 @@ SmallTalkClient::SmallTalkClient(QWidget *parent)
     fileSendBtn->setEnabled(false);
     addressLabel->setText(QString::fromLocal8Bit("服务器地址"));
     portLabel->setText(QString::fromLocal8Bit("服务器端口"));
+    userNameLabel->setText(QString::fromLocal8Bit("用户名"));
     connectBtn->setText(QString::fromLocal8Bit("连接到服务器"));
     connectBtn->setEnabled(true);
 
@@ -42,16 +46,33 @@ SmallTalkClient::SmallTalkClient(QWidget *parent)
     mainLayout->addWidget(addressLabel, 4, 0, 1, 1);
     mainLayout->addWidget(addressEdit, 4, 1, 1, 2);
     mainLayout->addWidget(portLabel, 5, 0, 1, 1);
-    mainLayout->addWidget(portEdit, 5, 1, 1, 1);
-    mainLayout->addWidget(connectBtn, 5, 2, 1, 1);
+    mainLayout->addWidget(portEdit, 5, 1, 1, 2);
+    mainLayout->addWidget(userNameLabel, 6, 0, 1, 1);
+    mainLayout->addWidget(userNameEdit, 6, 1, 1, 1);
+    mainLayout->addWidget(connectBtn, 6, 2, 1, 1);
 
+    connect(contentSendBtn, SIGNAL(clicked()), this, SLOT(sendDataToServer()));
     connect(fileChooseBtn, SIGNAL(clicked()), this, SLOT(chooseFile()));
     connect(connectBtn, SIGNAL(clicked()), this, SLOT(connectOrDisconnectToServer()));
+    connect(clientSocket, SIGNAL(disconnected()), this, SLOT(disconnectToServer()));
+    connect(clientSocket, SIGNAL(readyRead()), this, SLOT(updateClient()));
 }
 
 SmallTalkClient::~SmallTalkClient()
 {
     delete ui;
+}
+
+void SmallTalkClient::sendDataToServer()
+{
+    QString content = contentEdit->toPlainText();
+    QJsonObject json;
+    json.insert("userName", userName);
+    json.insert("contentType", "text");
+    json.insert("content", content);
+    QJsonDocument document;
+    document.setObject(json);
+    clientSocket->write(document.toJson());
 }
 
 void SmallTalkClient::chooseFile()
@@ -68,6 +89,11 @@ void SmallTalkClient::connectOrDisconnectToServer()
         if (clientSocket->state() == QAbstractSocket::UnconnectedState)
         {
             QMessageBox::information(this, QString::fromLocal8Bit("连接服务器"), QString::fromLocal8Bit("连接失败，请检查您的输入"));
+            return;
+        }
+        if ((userName = userNameEdit->text()) == "")
+        {
+            QMessageBox::information(this, QString::fromLocal8Bit("连接到服务器"), QString::fromLocal8Bit("请输入用户名"));
             return;
         }
         contentSendBtn->setEnabled(true);
@@ -87,5 +113,55 @@ void SmallTalkClient::connectOrDisconnectToServer()
         fileChooseBtn->setEnabled(false);
         fileSendBtn->setEnabled(false);
         connectBtn->setText(QString::fromLocal8Bit("连接到服务器"));
+    }
+}
+
+void SmallTalkClient::disconnectToServer()
+{
+    contentSendBtn->setEnabled(false);
+    fileChooseBtn->setEnabled(false);
+    fileSendBtn->setEnabled(false);
+    connectBtn->setText(QString::fromLocal8Bit("连接到服务器"));
+}
+
+void SmallTalkClient::updateClient()
+{
+    QByteArray contentByteArray = clientSocket->readAll();
+    QJsonParseError error;
+    QJsonDocument document = QJsonDocument::fromJson(contentByteArray, &error);
+    if (document.isNull() || (error.error != QJsonParseError::NoError))
+    {
+        //Receive error json.
+        return;
+    }
+    QJsonObject json = document.object();
+    QString userName, contentType, content;
+    if (json.contains("userName"))
+    {
+        userName = json.value("userName").toString();
+    }
+    else
+    {
+        return;
+    }
+    if (json.contains("contentType"))
+    {
+        contentType = json.value("contentType").toString();
+    }
+    else
+    {
+        return;
+    }
+    if (json.contains("content"))
+    {
+        content = json.value("content").toString();
+    }
+    else
+    {
+        return;
+    }
+    if (userName == "" && contentType == "updateText")
+    {
+        contentListWidget->addItem(content);
     }
 }
