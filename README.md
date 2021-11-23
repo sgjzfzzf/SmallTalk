@@ -42,8 +42,8 @@
 - 聊天内容窗口
 - 聊天内容输入，发送键
 - 发送文件选择，发送键
-- 服务器IP号，服务器端口号，连接键（或者断开键）
-- 用户名
+- 服务器IP号，服务器端口号
+- 用户名，连接键（或者断开键）
 - （可能会有的）语音聊天模块
 
 ##### 文件发送
@@ -55,7 +55,27 @@
 使用json格式，如下
 
 ```json
-{"content_type":"text/file/sound", "content":"data of transmition"}
+{
+    "userName":"UserName", 
+    "contentType":"text/sound/updateText", 
+    "content":"data of transmition"
+}
+```
+
+文件发送与上方类似，采用如下格式
+
+```json
+{
+    "userName":"UserName", 
+    "contentType":"text/file/sound/updateText", 
+    "fileName":"name of file",
+    "content":"data of transmition"
+}
 ```
 
 （可能会再添加一个关于返回状态的字段，视实际需求决定）
+
+## 已知Bug
+
+- [ ] 客户端连接失败时按键错误变成可点击的状态
+- [ ] 文件发送二进制文件有问题，主要问题在于json原生不支持二进制格式的存储

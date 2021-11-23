@@ -6,6 +6,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QDir>
 
 SmallTalkServer::SmallTalkServer(QWidget *parent)
     : QDialog(parent), ui(new Ui::SmallTalkServer)
@@ -38,17 +39,11 @@ SmallTalkServer::~SmallTalkServer()
     delete ui;
 }
 
-void SmallTalkServer::updateClients(QString msg)
+void SmallTalkServer::updateClients(QByteArray content)
 {
     for (int i = 0; i < clientSockets.length(); ++i)
     {
-        QJsonObject json;
-        json.insert("userName", "");
-        json.insert("contentType", "updateText");
-        json.insert("content", msg);
-        QJsonDocument document;
-        document.setObject(json);
-        clientSockets[i]->write(document.toJson());
+        clientSockets[i]->write(content);
     }
 }
 
@@ -95,7 +90,7 @@ void SmallTalkServer::handleNewData()
         return;
     }
     QJsonObject json = document.object();
-    QString userName, contentType, content;
+    QString userName, contentType;
     if (json.contains("userName"))
     {
         userName = json.value("userName").toString();
@@ -112,22 +107,32 @@ void SmallTalkServer::handleNewData()
     {
         return;
     }
-    if (json.contains("content"))
-    {
-        content = json.value("content").toString();
-    }
-    else
-    {
-        return;
-    }
     if (contentType == "text")
     {
+        QString content;
+        if (json.contains("content"))
+        {
+            content = json.value("content").toString();
+        }
+        else
+        {
+            return;
+        }
         QString msg = userName + ":" + content;
         contentListWidget->addItem(msg);
-        updateClients(msg);
     }
     else if (contentType == "file")
     {
-        //TODO:finish file process part
+        QString fileName;
+        if (json.contains("fileName"))
+        {
+            fileName = json.value("fileName").toString();
+        }
+        else
+        {
+            return;
+        }
+        contentListWidget->addItem(QString("%1 send the file %2.").arg(userName, fileName));
     }
+    updateClients(document.toJson());
 }

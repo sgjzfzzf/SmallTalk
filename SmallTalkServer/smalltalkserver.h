@@ -24,7 +24,7 @@ class SmallTalkServer : public QDialog
 public:
     SmallTalkServer(QWidget *parent = nullptr);
     ~SmallTalkServer();
-    void updateClients(QString);
+    void updateClients(QByteArray);
 
 public slots:
     void createOrDestoryRoomServer();

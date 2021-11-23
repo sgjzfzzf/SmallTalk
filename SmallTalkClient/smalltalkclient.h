@@ -28,6 +28,7 @@ public:
 public slots:
     void sendDataToServer();
     void chooseFile();
+    void sendFile();
     void connectOrDisconnectToServer();
     void disconnectToServer();
     void updateClient();

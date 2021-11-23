@@ -53,6 +53,7 @@ SmallTalkClient::SmallTalkClient(QWidget *parent)
 
     connect(contentSendBtn, SIGNAL(clicked()), this, SLOT(sendDataToServer()));
     connect(fileChooseBtn, SIGNAL(clicked()), this, SLOT(chooseFile()));
+    connect(fileSendBtn, SIGNAL(clicked()), this, SLOT(sendFile()));
     connect(connectBtn, SIGNAL(clicked()), this, SLOT(connectOrDisconnectToServer()));
     connect(clientSocket, SIGNAL(disconnected()), this, SLOT(disconnectToServer()));
     connect(clientSocket, SIGNAL(readyRead()), this, SLOT(updateClient()));
@@ -61,6 +62,11 @@ SmallTalkClient::SmallTalkClient(QWidget *parent)
 SmallTalkClient::~SmallTalkClient()
 {
     delete ui;
+    QDir dir(QDir::currentPath());
+    if (dir.exists("tmp"))
+    {
+        dir.rmpath("tmp");
+    }
 }
 
 void SmallTalkClient::sendDataToServer()
@@ -79,6 +85,25 @@ void SmallTalkClient::chooseFile()
 {
     QString filePath = QFileDialog::getOpenFileName(this, QString::fromLocal8Bit("选择发送文件"), ".", "");
     fileNameLabel->setText(filePath);
+}
+
+void SmallTalkClient::sendFile()
+{
+    QString filePath = fileNameLabel->text(), fileName = filePath.split("/").last();
+    QFile file(filePath);
+    if(!file.open(QIODevice::ReadOnly))
+    {
+        QMessageBox::information(this, QString::fromLocal8Bit("文件传输"), QString::fromLocal8Bit("文件打开失败"));
+    }
+    QByteArray content = file.readAll();
+    QJsonObject json;
+    json.insert("userName", userName);
+    json.insert("contentType", "file");
+    json.insert("fileName", fileName);
+    json.insert("content", QJsonValue::fromVariant(content.toBase64()));
+    QJsonDocument document;
+    document.setObject(json);
+    clientSocket->write(document.toJson());
 }
 
 void SmallTalkClient::connectOrDisconnectToServer()
@@ -135,7 +160,7 @@ void SmallTalkClient::updateClient()
         return;
     }
     QJsonObject json = document.object();
-    QString userName, contentType, content;
+    QString userName, contentType;
     if (json.contains("userName"))
     {
         userName = json.value("userName").toString();
@@ -152,16 +177,53 @@ void SmallTalkClient::updateClient()
     {
         return;
     }
-    if (json.contains("content"))
+    if (contentType == "text")
     {
-        content = json.value("content").toString();
+        QString content;
+        if (json.contains("content"))
+        {
+            content = json.value("content").toString();
+        }
+        else
+        {
+            return;
+        }
+        contentListWidget->addItem(QString("%1 : %2").arg(userName, content));
     }
-    else
+    else if (contentType == "file")
     {
-        return;
-    }
-    if (userName == "" && contentType == "updateText")
-    {
-        contentListWidget->addItem(content);
+        QString fileName;
+        QByteArray content;
+        if (json.contains("fileName"))
+        {
+            fileName = json.value("fileName").toString();
+        }
+        else
+        {
+            return;
+        }
+        if (json.contains("content"))
+        {
+            content = QByteArray::fromBase64(json.value("content").toVariant().toByteArray());
+        }
+        else
+        {
+            return;
+        }
+        QDir dir(QDir::currentPath());
+        if (!dir.exists("tmp"))
+        {
+            dir.mkdir("tmp");
+        }
+        QFile file(QString("tmp/%1").arg(fileName));
+        if(file.open(QIODevice::WriteOnly))
+        {
+            file.write(content);
+            contentListWidget->addItem(QString("%1 send the file %2.").arg(userName, fileName));
+        }
+        else
+        {
+            QMessageBox::information(this, QString::fromLocal8Bit("文件传输"), QString::fromLocal8Bit("文件接收错误"));
+        }
     }
 }
