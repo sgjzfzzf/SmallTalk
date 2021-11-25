@@ -61,12 +61,12 @@ SmallTalkClient::SmallTalkClient(QWidget *parent)
 
 SmallTalkClient::~SmallTalkClient()
 {
-    delete ui;
     QDir dir(QDir::currentPath());
-    if (dir.exists("tmp"))
+    if (dir.exists("doc"))
     {
-        dir.rmpath("tmp");
+        dir.rmpath("doc");
     }
+    delete ui;
 }
 
 void SmallTalkClient::sendDataToServer()
@@ -91,19 +91,30 @@ void SmallTalkClient::sendFile()
 {
     QString filePath = fileNameLabel->text(), fileName = filePath.split("/").last();
     QFile file(filePath);
-    if(!file.open(QIODevice::ReadOnly))
+    if (!file.open(QIODevice::ReadOnly))
     {
         QMessageBox::information(this, QString::fromLocal8Bit("文件传输"), QString::fromLocal8Bit("文件打开失败"));
+        return;
     }
     QByteArray content = file.readAll();
+    file.close();
     QJsonObject json;
     json.insert("userName", userName);
     json.insert("contentType", "file");
-    json.insert("fileName", fileName);
-    json.insert("content", QJsonValue::fromVariant(content.toBase64()));
+    json.insert("content", fileName);
     QJsonDocument document;
     document.setObject(json);
     clientSocket->write(document.toJson());
+    disconnect(clientSocket, SIGNAL(readyRead()), this, SLOT(updateClient()));
+    if (clientSocket->waitForReadyRead())
+    {
+        QString receiveData = QString::fromLocal8Bit(clientSocket->readAll());
+        if (receiveData == SmallTalkClient::FLAG_RECEIVE)
+        {
+            clientSocket->write(content);
+        }
+    }
+    connect(clientSocket, SIGNAL(readyRead()), this, SLOT(updateClient()));
 }
 
 void SmallTalkClient::connectOrDisconnectToServer()
@@ -193,32 +204,38 @@ void SmallTalkClient::updateClient()
     else if (contentType == "file")
     {
         QString fileName;
-        QByteArray content;
-        if (json.contains("fileName"))
-        {
-            fileName = json.value("fileName").toString();
-        }
-        else
-        {
-            return;
-        }
         if (json.contains("content"))
         {
-            content = QByteArray::fromBase64(json.value("content").toVariant().toByteArray());
+            fileName = json.value("content").toString();
         }
         else
         {
             return;
         }
+        clientSocket->write(SmallTalkClient::FLAG_RECEIVE.toLocal8Bit());
+        disconnect(clientSocket, SIGNAL(readyRead()), this, SLOT(updateClient()));
+        QByteArray contentByteArray, subContentByteArray;
+        int len = 0;
+        do
+        {
+            len = 0;
+            if (clientSocket->waitForReadyRead(1000))
+            {
+                subContentByteArray = clientSocket->readAll();
+                contentByteArray.append(subContentByteArray);
+                len = subContentByteArray.size();
+            }
+        } while (len == SmallTalkClient::BLOCK_SIZE);
+        connect(clientSocket, SIGNAL(readyRead()), this, SLOT(updateClient()));
         QDir dir(QDir::currentPath());
-        if (!dir.exists("tmp"))
+        if (!dir.exists("doc"))
         {
-            dir.mkdir("tmp");
+            dir.mkdir("doc");
         }
-        QFile file(QString("tmp/%1").arg(fileName));
-        if(file.open(QIODevice::WriteOnly))
+        QFile file(QString("doc/%1").arg(fileName));
+        if (file.open(QIODevice::WriteOnly))
         {
-            file.write(content);
+            file.write(contentByteArray);
             contentListWidget->addItem(QString("%1 send the file %2.").arg(userName, fileName));
         }
         else

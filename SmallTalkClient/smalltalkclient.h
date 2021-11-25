@@ -34,6 +34,8 @@ public slots:
     void updateClient();
 
 private:
+    const int BLOCK_SIZE = 0x10000;
+    const QString FLAG_RECEIVE = "Receive json.";
     Ui::SmallTalkClient *ui;
     QTcpSocket *clientSocket;
     QListWidget *contentListWidget;

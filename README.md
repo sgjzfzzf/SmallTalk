@@ -57,25 +57,19 @@
 ```json
 {
     "userName":"UserName", 
-    "contentType":"text/sound/updateText", 
-    "content":"data of transmition"
-}
-```
-
-文件发送与上方类似，采用如下格式
-
-```json
-{
-    "userName":"UserName", 
-    "contentType":"text/file/sound/updateText", 
-    "fileName":"name of file",
-    "content":"data of transmition"
+    "contentType":"text/file/sound", 
+    "content":"The data of transmition.And as for file, it's the name of file."
 }
 ```
 
 （可能会再添加一个关于返回状态的字段，视实际需求决定）
 
+文件发送略有不同。首先会发送一个json文本，等到对方确认收到后马上发送文件本身的内容。
+
 ## 已知Bug
 
 - [ ] 客户端连接失败时按键错误变成可点击的状态
-- [ ] 文件发送二进制文件有问题，主要问题在于json原生不支持二进制格式的存储
+- [x] 文件发送二进制文件有问题，主要问题在于json原生不支持二进制格式的存储（放弃使用json传递二进制数据，改为两次传输）
+- [x] 发送大文件会出现损坏的情况（Bug修复说明：对于TcpSocket的Write函数而言，当传入的参数长度大于0x10000时，会自动将其分片，故在接收端应该多次接收传入的数据包并最终进行拼接）
+- [ ] 关闭客户端时无法自动删除文件
+

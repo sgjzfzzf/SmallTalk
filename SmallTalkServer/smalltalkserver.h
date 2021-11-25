@@ -24,7 +24,8 @@ class SmallTalkServer : public QDialog
 public:
     SmallTalkServer(QWidget *parent = nullptr);
     ~SmallTalkServer();
-    void updateClients(QByteArray);
+    void updateClientsText(QByteArray);
+    void updateClientsFile(QByteArray, QByteArray);
 
 public slots:
     void createOrDestoryRoomServer();
@@ -32,6 +33,8 @@ public slots:
     void handleNewData();
 
 private:
+    const int BLOCK_SIZE = 0x10000;
+    const QString FLAG_RECEIVE = "Receive json.";
     Ui::SmallTalkServer *ui;
     int port;
     QTcpServer *serverSocket;

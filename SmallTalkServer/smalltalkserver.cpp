@@ -39,11 +39,29 @@ SmallTalkServer::~SmallTalkServer()
     delete ui;
 }
 
-void SmallTalkServer::updateClients(QByteArray content)
+void SmallTalkServer::updateClientsText(QByteArray content)
 {
     for (int i = 0; i < clientSockets.length(); ++i)
     {
         clientSockets[i]->write(content);
+    }
+}
+
+void SmallTalkServer::updateClientsFile(QByteArray content, QByteArray file)
+{
+    for (int i = 0; i < clientSockets.length(); ++i)
+    {
+        clientSockets[i]->write(content);
+        disconnect(clientSockets[i], SIGNAL(readyRead()), this, SLOT(handleNewData()));
+        if (clientSockets[i]->waitForReadyRead())
+        {
+            QByteArray receiveData = clientSockets[i]->readAll();
+            if (receiveData == SmallTalkServer::FLAG_RECEIVE)
+            {
+                clientSockets[i]->write(file);
+            }
+        }
+        connect(clientSockets[i], SIGNAL(readyRead()), this, SLOT(handleNewData()));
     }
 }
 
@@ -120,19 +138,35 @@ void SmallTalkServer::handleNewData()
         }
         QString msg = userName + ":" + content;
         contentListWidget->addItem(msg);
+        updateClientsText(document.toJson());
     }
     else if (contentType == "file")
     {
         QString fileName;
-        if (json.contains("fileName"))
+        if (json.contains("content"))
         {
-            fileName = json.value("fileName").toString();
+            fileName = json.value("content").toString();
         }
         else
         {
             return;
         }
         contentListWidget->addItem(QString("%1 send the file %2.").arg(userName, fileName));
+        clientSocket->write(SmallTalkServer::FLAG_RECEIVE.toLocal8Bit());
+        disconnect(clientSocket, SIGNAL(readyRead()), this, SLOT(handleNewData()));
+        QByteArray contentByteArray, subContentByteArray;
+        int len = 0;
+        do
+        {
+            len = 0;
+            if (clientSocket->waitForReadyRead(1000))
+            {
+                subContentByteArray = clientSocket->readAll();
+                contentByteArray.append(subContentByteArray);
+                len = subContentByteArray.size();
+            }
+        } while (len == SmallTalkServer::BLOCK_SIZE);
+        updateClientsFile(document.toJson(), contentByteArray);
+        connect(clientSocket, SIGNAL(readyRead()), this, SLOT(handleNewData()));
     }
-    updateClients(document.toJson());
 }
