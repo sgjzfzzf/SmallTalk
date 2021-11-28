@@ -7,22 +7,21 @@
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QDir>
+#include <QMovie>
 
 SmallTalkServer::SmallTalkServer(QWidget *parent)
     : QDialog(parent), ui(new Ui::SmallTalkServer)
 {
     ui->setupUi(this);
     serverSocket = new QTcpServer;
-    contentLabel = new QLabel;
+    contentLabel = new QLabel(QString::fromLocal8Bit("聊天室内容"));
     contentListWidget = new QListWidget;
-    portLabel = new QLabel;
+    portLabel = new QLabel(QString::fromLocal8Bit("端口号"));
     portEdit = new QLineEdit;
-    portConfirmBtn = new QPushButton;
+    portConfirmBtn = new QPushButton(QString::fromLocal8Bit("创建"));
     mainLayout = new QGridLayout(this);
 
-    contentLabel->setText(QString::fromLocal8Bit("聊天室内容"));
-    portLabel->setText(QString::fromLocal8Bit("端口号"));
-    portConfirmBtn->setText(QString::fromLocal8Bit("创建"));
+    contentListWidget->setIconSize(QSize(200, 200));
 
     mainLayout->addWidget(contentLabel, 0, 0, 1, 3);
     mainLayout->addWidget(contentListWidget, 1, 0, 1, 3);
@@ -36,6 +35,12 @@ SmallTalkServer::SmallTalkServer(QWidget *parent)
 
 SmallTalkServer::~SmallTalkServer()
 {
+    QDir dir(QDir::currentPath());
+    if (dir.exists("doc"))
+    {
+        dir.cd("doc");
+        dir.removeRecursively();
+    }
     delete ui;
 }
 
@@ -142,31 +147,131 @@ void SmallTalkServer::handleNewData()
     }
     else if (contentType == "file")
     {
+        int fileSize;
         QString fileName;
+        QJsonObject fileInfo;
         if (json.contains("content"))
         {
-            fileName = json.value("content").toString();
+            fileInfo = json.value("content").toObject();
+            if (fileInfo.contains("fileName"))
+            {
+                fileName = fileInfo.value("fileName").toString();
+            }
+            else
+            {
+                return;
+            }
+            if (fileInfo.contains("fileSize"))
+            {
+                fileSize = fileInfo.value("fileSize").toInt();
+            }
+            else
+            {
+                return;
+            }
         }
         else
         {
             return;
         }
-        contentListWidget->addItem(QString("%1 send the file %2.").arg(userName, fileName));
-        clientSocket->write(SmallTalkServer::FLAG_RECEIVE.toLocal8Bit());
+        contentListWidget->addItem(QString::fromLocal8Bit("%1 发送了文件 %2.").arg(userName, fileName));
         disconnect(clientSocket, SIGNAL(readyRead()), this, SLOT(handleNewData()));
+        clientSocket->write(SmallTalkServer::FLAG_RECEIVE.toLocal8Bit());
         QByteArray contentByteArray, subContentByteArray;
-        int len = 0;
-        do
+        while (fileSize > 0)
         {
-            len = 0;
-            if (clientSocket->waitForReadyRead(1000))
+            if (clientSocket->waitForReadyRead())
             {
                 subContentByteArray = clientSocket->readAll();
                 contentByteArray.append(subContentByteArray);
-                len = subContentByteArray.size();
+                fileSize -= subContentByteArray.size();
             }
-        } while (len == SmallTalkServer::BLOCK_SIZE);
+        }
         updateClientsFile(document.toJson(), contentByteArray);
         connect(clientSocket, SIGNAL(readyRead()), this, SLOT(handleNewData()));
+    }
+    else if (contentType == "img")
+    {
+        int imgSize;
+        QString imgName;
+        QJsonObject imgInfo;
+        if (json.contains("content"))
+        {
+            imgInfo = json.value("content").toObject();
+            if (imgInfo.contains("imgName"))
+            {
+                imgName = imgInfo.value("imgName").toString().split('/').last();
+            }
+            else
+            {
+                return;
+            }
+            if (imgInfo.contains("imgSize"))
+            {
+                imgSize = imgInfo.value("imgSize").toInt();
+            }
+            else
+            {
+                return;
+            }
+        }
+        else
+        {
+            return;
+        }
+        disconnect(clientSocket, SIGNAL(readyRead()), this, SLOT(handleNewData()));
+        clientSocket->write(SmallTalkServer::FLAG_RECEIVE.toLocal8Bit());
+        QByteArray contentByteArray, subContentByteArray;
+        while (imgSize > 0)
+        {
+            if (clientSocket->waitForReadyRead())
+            {
+                subContentByteArray = clientSocket->readAll();
+                contentByteArray.append(subContentByteArray);
+                imgSize -= subContentByteArray.size();
+            }
+        }
+        updateClientsFile(document.toJson(), contentByteArray);
+        connect(clientSocket, SIGNAL(readyRead()), this, SLOT(handleNewData()));
+        if (imgName.split('.').last() == "gif")
+        {
+            QDir dir(QDir::currentPath());
+            if (!dir.exists("doc"))
+            {
+                dir.mkdir("doc");
+            }
+            dir.cd("doc");
+            imgName = QString("%1/%2").arg(dir.absolutePath(), imgName);
+            QFile imgFile(imgName);
+            if (!imgFile.open(QIODevice::WriteOnly))
+            {
+                return;
+            }
+            imgFile.write(contentByteArray);
+            QLabel *gifLabel = new QLabel;
+            QMovie *gif = new QMovie(imgName);
+            gif->setScaledSize(QSize(200, 200));
+            if (!gif->isValid())
+            {
+                delete gifLabel;
+                return;
+            }
+            gifLabel->setMovie(gif);
+            QListWidgetItem *item = new QListWidgetItem;
+            item->setSizeHint(QSize(200, 200));
+            contentListWidget->addItem(QString("%1:").arg(userName));
+            contentListWidget->addItem(item);
+            contentListWidget->setItemWidget(item, gifLabel);
+            gif->start();
+        }
+        else
+        {
+            QPixmap pixmap;
+            pixmap.loadFromData(contentByteArray);
+            QIcon img(pixmap);
+            QListWidgetItem *item = new QListWidgetItem(img, "");
+            contentListWidget->addItem(QString("%1:").arg(userName));
+            contentListWidget->addItem(item);
+        }
     }
 }

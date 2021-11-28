@@ -4,59 +4,50 @@
 #include <QFileDialog>
 #include <QJsonObject>
 #include <QJsonDocument>
+#include <QMovie>
 
 SmallTalkClient::SmallTalkClient(QWidget *parent)
     : QDialog(parent), ui(new Ui::SmallTalkClient)
 {
     ui->setupUi(this);
     clientSocket = new QTcpSocket;
+    menuBar = new QMenuBar;
+    connectMenu = new QMenu(QString::fromLocal8Bit("连接"));
+    fileMenu = new QMenu(QString::fromLocal8Bit("文件"));
+    connectAction = new QAction(QString::fromLocal8Bit("连接到服务器"));
+    disconnectAction = new QAction(QString::fromLocal8Bit("从服务器断开"));
+    fileSendAction = new QAction(QString::fromLocal8Bit("发送文件"));
+    imgSendAction = new QAction(QString::fromLocal8Bit("本地表情发送"));
     contentListWidget = new QListWidget;
     contentEdit = new QTextEdit;
-    contentSendBtn = new QPushButton;
-    fileNameLabel = new QLabel;
-    fileChooseBtn = new QPushButton;
-    fileSendBtn = new QPushButton;
-    addressLabel = new QLabel;
-    addressEdit = new QLineEdit;
-    portLabel = new QLabel;
-    portEdit = new QLineEdit;
-    userNameLabel = new QLabel;
-    userNameEdit = new QLineEdit;
-    connectBtn = new QPushButton;
+    contentSendBtn = new QPushButton(QString::fromLocal8Bit("发送"));
     mainLayout = new QGridLayout(this);
 
-    contentSendBtn->setText(QString::fromLocal8Bit("发送"));
+    menuBar->addMenu(connectMenu);
+    menuBar->addMenu(fileMenu);
+    connectMenu->addAction(connectAction);
+    connectMenu->addAction(disconnectAction);
+    fileMenu->addAction(fileSendAction);
+    fileMenu->addAction(imgSendAction);
     contentSendBtn->setEnabled(false);
-    fileChooseBtn->setText(QString::fromLocal8Bit("选择文件"));
-    fileChooseBtn->setEnabled(false);
-    fileSendBtn->setText(QString::fromLocal8Bit("发送"));
-    fileSendBtn->setEnabled(false);
-    addressLabel->setText(QString::fromLocal8Bit("服务器地址"));
-    portLabel->setText(QString::fromLocal8Bit("服务器端口"));
-    userNameLabel->setText(QString::fromLocal8Bit("用户名"));
-    connectBtn->setText(QString::fromLocal8Bit("连接到服务器"));
-    connectBtn->setEnabled(true);
+    connectAction->setEnabled(true);
+    disconnectAction->setEnabled(false);
+    fileSendAction->setEnabled(false);
+    imgSendAction->setEnabled(false);
+    contentListWidget->setIconSize(QSize(200, 200));
 
-    mainLayout->addWidget(contentListWidget, 0, 0, 1, 3);
-    mainLayout->addWidget(contentEdit, 1, 0, 1, 3);
-    mainLayout->addWidget(contentSendBtn, 2, 2, 1, 1);
-    mainLayout->addWidget(fileNameLabel, 3, 0, 1, 1);
-    mainLayout->addWidget(fileChooseBtn, 3, 1, 1, 1);
-    mainLayout->addWidget(fileSendBtn, 3, 2, 1, 1);
-    mainLayout->addWidget(addressLabel, 4, 0, 1, 1);
-    mainLayout->addWidget(addressEdit, 4, 1, 1, 2);
-    mainLayout->addWidget(portLabel, 5, 0, 1, 1);
-    mainLayout->addWidget(portEdit, 5, 1, 1, 2);
-    mainLayout->addWidget(userNameLabel, 6, 0, 1, 1);
-    mainLayout->addWidget(userNameEdit, 6, 1, 1, 1);
-    mainLayout->addWidget(connectBtn, 6, 2, 1, 1);
+    mainLayout->addWidget(menuBar, 0, 0, 1, 3);
+    mainLayout->addWidget(contentListWidget, 1, 0, 1, 3);
+    mainLayout->addWidget(contentEdit, 2, 0, 1, 3);
+    mainLayout->addWidget(contentSendBtn, 3, 2, 1, 1);
 
-    connect(contentSendBtn, SIGNAL(clicked()), this, SLOT(sendDataToServer()));
-    connect(fileChooseBtn, SIGNAL(clicked()), this, SLOT(chooseFile()));
-    connect(fileSendBtn, SIGNAL(clicked()), this, SLOT(sendFile()));
-    connect(connectBtn, SIGNAL(clicked()), this, SLOT(connectOrDisconnectToServer()));
     connect(clientSocket, SIGNAL(disconnected()), this, SLOT(disconnectToServer()));
     connect(clientSocket, SIGNAL(readyRead()), this, SLOT(updateClient()));
+    connect(connectAction, SIGNAL(triggered()), this, SLOT(connectActionTriggered()));
+    connect(disconnectAction, SIGNAL(triggered()), this, SLOT(disconnectActionTriggered()));
+    connect(fileSendAction, SIGNAL(triggered()), this, SLOT(sendFile()));
+    connect(imgSendAction, SIGNAL(triggered()), this, SLOT(sendImg()));
+    connect(contentSendBtn, SIGNAL(clicked()), this, SLOT(sendDataToServer()));
 }
 
 SmallTalkClient::~SmallTalkClient()
@@ -64,44 +55,86 @@ SmallTalkClient::~SmallTalkClient()
     QDir dir(QDir::currentPath());
     if (dir.exists("doc"))
     {
-        dir.rmpath("doc");
+        dir.cd("doc");
+        dir.removeRecursively();
     }
     delete ui;
 }
 
-void SmallTalkClient::sendDataToServer()
+void SmallTalkClient::connectActionTriggered()
 {
-    QString content = contentEdit->toPlainText();
-    QJsonObject json;
-    json.insert("userName", userName);
-    json.insert("contentType", "text");
-    json.insert("content", content);
-    QJsonDocument document;
-    document.setObject(json);
-    clientSocket->write(document.toJson());
+    ConnectDialog *dialog = new ConnectDialog;
+    connect(dialog, SIGNAL(returnFileDialog(QString, int, QString)), this, SLOT(connectToServer(QString, int, QString)));
+    dialog->show();
 }
 
-void SmallTalkClient::chooseFile()
+void SmallTalkClient::disconnectActionTriggered()
 {
-    QString filePath = QFileDialog::getOpenFileName(this, QString::fromLocal8Bit("选择发送文件"), ".", "");
-    fileNameLabel->setText(filePath);
+    clientSocket->disconnectFromHost();
+    if (clientSocket->state() == QAbstractSocket::ConnectedState)
+    {
+        QMessageBox::information(this, QString::fromLocal8Bit("连接服务器"), QString::fromLocal8Bit("断开失败，请重试"));
+        return;
+    }
+    contentSendBtn->setEnabled(false);
+    connectAction->setEnabled(true);
+    disconnectAction->setEnabled(false);
+    fileSendAction->setEnabled(false);
+    imgSendAction->setEnabled(false);
+}
+
+void SmallTalkClient::connectToServer(QString address, int port, QString newUserName)
+{
+    if ((userName = newUserName) == "")
+    {
+        QMessageBox::information(this, QString::fromLocal8Bit("连接到服务器"), QString::fromLocal8Bit("请输入用户名"));
+        return;
+    }
+    clientSocket->connectToHost(address, port);
+    if (clientSocket->state() == QAbstractSocket::UnconnectedState)
+    {
+        QMessageBox::information(this, QString::fromLocal8Bit("连接服务器"), QString::fromLocal8Bit("连接失败，请检查您的输入"));
+        return;
+    }
+    contentSendBtn->setEnabled(true);
+    connectAction->setEnabled(false);
+    disconnectAction->setEnabled(true);
+    fileSendAction->setEnabled(true);
+    imgSendAction->setEnabled(true);
+}
+
+void SmallTalkClient::disconnectToServer()
+{
+    contentSendBtn->setEnabled(false);
+    connectAction->setEnabled(true);
+    disconnectAction->setEnabled(false);
+    fileSendAction->setEnabled(false);
+    imgSendAction->setEnabled(false);
 }
 
 void SmallTalkClient::sendFile()
 {
-    QString filePath = fileNameLabel->text(), fileName = filePath.split("/").last();
+    QString filePath = QFileDialog::getOpenFileName(this, QString::fromLocal8Bit("选择发送文件"), ".", "");
+    if (filePath == "")
+    {
+        return;
+    }
+    QString fileName = filePath.split("/").last();
+    int fileSize;
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly))
     {
-        QMessageBox::information(this, QString::fromLocal8Bit("文件传输"), QString::fromLocal8Bit("文件打开失败"));
         return;
     }
+    fileSize = file.size();
     QByteArray content = file.readAll();
     file.close();
-    QJsonObject json;
+    QJsonObject json, fileInfo;
     json.insert("userName", userName);
     json.insert("contentType", "file");
-    json.insert("content", fileName);
+    fileInfo.insert("fileName", fileName);
+    fileInfo.insert("fileSize", fileSize);
+    json.insert("content", fileInfo);
     QJsonDocument document;
     document.setObject(json);
     clientSocket->write(document.toJson());
@@ -115,49 +148,6 @@ void SmallTalkClient::sendFile()
         }
     }
     connect(clientSocket, SIGNAL(readyRead()), this, SLOT(updateClient()));
-}
-
-void SmallTalkClient::connectOrDisconnectToServer()
-{
-    if (connectBtn->text() == QString::fromLocal8Bit("连接到服务器"))
-    {
-        clientSocket->connectToHost(addressEdit->text(), (portEdit->text()).toInt());
-        if (clientSocket->state() == QAbstractSocket::UnconnectedState)
-        {
-            QMessageBox::information(this, QString::fromLocal8Bit("连接服务器"), QString::fromLocal8Bit("连接失败，请检查您的输入"));
-            return;
-        }
-        if ((userName = userNameEdit->text()) == "")
-        {
-            QMessageBox::information(this, QString::fromLocal8Bit("连接到服务器"), QString::fromLocal8Bit("请输入用户名"));
-            return;
-        }
-        contentSendBtn->setEnabled(true);
-        fileChooseBtn->setEnabled(true);
-        fileSendBtn->setEnabled(true);
-        connectBtn->setText(QString::fromLocal8Bit("从服务器断开"));
-    }
-    else if (connectBtn->text() == QString::fromLocal8Bit("从服务器断开"))
-    {
-        clientSocket->disconnectFromHost();
-        if (clientSocket->state() == QAbstractSocket::ConnectedState)
-        {
-            QMessageBox::information(this, QString::fromLocal8Bit("连接服务器"), QString::fromLocal8Bit("断开失败，请重试"));
-            return;
-        }
-        contentSendBtn->setEnabled(false);
-        fileChooseBtn->setEnabled(false);
-        fileSendBtn->setEnabled(false);
-        connectBtn->setText(QString::fromLocal8Bit("连接到服务器"));
-    }
-}
-
-void SmallTalkClient::disconnectToServer()
-{
-    contentSendBtn->setEnabled(false);
-    fileChooseBtn->setEnabled(false);
-    fileSendBtn->setEnabled(false);
-    connectBtn->setText(QString::fromLocal8Bit("连接到服务器"));
 }
 
 void SmallTalkClient::updateClient()
@@ -203,29 +193,41 @@ void SmallTalkClient::updateClient()
     }
     else if (contentType == "file")
     {
+        int fileSize = 0;
         QString fileName;
+        QJsonObject fileInfo;
         if (json.contains("content"))
         {
-            fileName = json.value("content").toString();
-        }
-        else
-        {
-            return;
+            fileInfo = json.value("content").toObject();
+            if (fileInfo.contains("fileName"))
+            {
+                fileName = fileInfo.value("fileName").toString();
+            }
+            else
+            {
+                return;
+            }
+            if (fileInfo.contains("fileSize"))
+            {
+                fileSize = fileInfo.value("fileSize").toInt();
+            }
+            else
+            {
+                return;
+            }
         }
         clientSocket->write(SmallTalkClient::FLAG_RECEIVE.toLocal8Bit());
         disconnect(clientSocket, SIGNAL(readyRead()), this, SLOT(updateClient()));
         QByteArray contentByteArray, subContentByteArray;
-        int len = 0;
-        do
+        while (fileSize > 0)
         {
-            len = 0;
-            if (clientSocket->waitForReadyRead(1000))
+            if (clientSocket->waitForReadyRead())
             {
                 subContentByteArray = clientSocket->readAll();
                 contentByteArray.append(subContentByteArray);
-                len = subContentByteArray.size();
+                fileSize -= subContentByteArray.size();
             }
-        } while (len == SmallTalkClient::BLOCK_SIZE);
+        }
         connect(clientSocket, SIGNAL(readyRead()), this, SLOT(updateClient()));
         QDir dir(QDir::currentPath());
         if (!dir.exists("doc"))
@@ -236,11 +238,157 @@ void SmallTalkClient::updateClient()
         if (file.open(QIODevice::WriteOnly))
         {
             file.write(contentByteArray);
-            contentListWidget->addItem(QString("%1 send the file %2.").arg(userName, fileName));
+            contentListWidget->addItem(QString::fromLocal8Bit("%1 发送了文件 %2.").arg(userName, fileName));
         }
         else
         {
             QMessageBox::information(this, QString::fromLocal8Bit("文件传输"), QString::fromLocal8Bit("文件接收错误"));
         }
     }
+    else if (contentType == "img")
+    {
+        qDebug() << "enter img";
+        int imgSize;
+        QString imgName;
+        QJsonObject imgInfo;
+        if (json.contains("content"))
+        {
+            imgInfo = json.value("content").toObject();
+            if (imgInfo.contains("imgName"))
+            {
+                imgName = imgInfo.value("imgName").toString();
+            }
+            else
+            {
+                return;
+            }
+            if (imgInfo.contains("imgSize"))
+            {
+                imgSize = imgInfo.value("imgSize").toInt();
+            }
+            else
+            {
+                return;
+            }
+        }
+        else
+        {
+            return;
+        }
+        disconnect(clientSocket, SIGNAL(readyRead()), this, SLOT(updateClient()));
+        clientSocket->write(SmallTalkClient::FLAG_RECEIVE.toLocal8Bit());
+        QByteArray contentByteArray, subContentByteArray;
+        while (imgSize > 0)
+        {
+            if (clientSocket->waitForReadyRead())
+            {
+                subContentByteArray = clientSocket->readAll();
+                contentByteArray.append(subContentByteArray);
+                imgSize -= subContentByteArray.size();
+            }
+        }
+        connect(clientSocket, SIGNAL(readyRead()), this, SLOT(updateClient()));
+        if (imgName.split('.').last() == "gif")
+        {
+            QDir dir(QDir::currentPath());
+            if (!dir.exists("doc"))
+            {
+                dir.mkdir("doc");
+            }
+            imgName = QString("%1/%2").arg("doc", imgName);
+            QFile imgFile(imgName);
+            if (!imgFile.open(QIODevice::WriteOnly))
+            {
+                return;
+            }
+            imgFile.write(contentByteArray);
+            QLabel *gifLabel = new QLabel;
+            QMovie *gif = new QMovie(imgName);
+            gif->setScaledSize(QSize(200, 200));
+            if (!gif->isValid())
+            {
+                delete gifLabel;
+                return;
+            }
+            gifLabel->setMovie(gif);
+            QListWidgetItem *item = new QListWidgetItem;
+            item->setSizeHint(QSize(200, 200));
+            contentListWidget->addItem(QString("%1:").arg(userName));
+            contentListWidget->addItem(item);
+            contentListWidget->setItemWidget(item, gifLabel);
+            gif->start();
+        }
+        else
+        {
+            QPixmap pixmap;
+            pixmap.loadFromData(contentByteArray);
+            QIcon img(pixmap);
+            QListWidgetItem *item = new QListWidgetItem(img, "");
+            contentListWidget->addItem(QString("%1:").arg(userName));
+            contentListWidget->addItem(item);
+        }
+    }
+}
+
+void SmallTalkClient::sendImg()
+{
+    QDir dir;
+    dir.currentPath();
+    if (!dir.exists("img"))
+    {
+        dir.mkdir("img");
+    }
+    dir.cd("img");
+    QString imgPath = QFileDialog::getOpenFileName(this, QString::fromLocal8Bit("本地表情发送"), dir.currentPath() + "/img", "*.png;;*.jpg;;*.jpeg;;*.gif");
+    if (imgPath == "")
+    {
+        return;
+    }
+    QFile img(imgPath);
+    img.open(QIODevice::ReadOnly);
+    if (!img.isOpen())
+    {
+        QMessageBox::information(this, QString::fromLocal8Bit("本地表情"), QString::fromLocal8Bit("获取本地资源失败"));
+        return;
+    }
+    int imgSize = img.size();
+    QByteArray content = img.readAll();
+    img.close();
+    QJsonObject json, imgInfo;
+    json.insert("userName", userName);
+    json.insert("contentType", "img");
+    imgInfo.insert("imgName", imgPath.split('/').last());
+    imgInfo.insert("imgSize", imgSize);
+    json.insert("content", imgInfo);
+    QJsonDocument document;
+    document.setObject(json);
+    clientSocket->write(document.toJson());
+    disconnect(clientSocket, SIGNAL(readyRead()), this, SLOT(updateClient()));
+    if (clientSocket->waitForReadyRead())
+    {
+        QString receiveContent = clientSocket->readAll();
+        if (receiveContent == SmallTalkClient::FLAG_RECEIVE)
+        {
+            clientSocket->write(content);
+        }
+        else
+        {
+            QMessageBox::information(this, QString::fromLocal8Bit("本地表情"), QString::fromLocal8Bit("接收响应失败"));
+            connect(clientSocket, SIGNAL(readyRead()), this, SLOT(updateClient()));
+            return;
+        }
+    }
+    connect(clientSocket, SIGNAL(readyRead()), this, SLOT(updateClient()));
+}
+
+void SmallTalkClient::sendDataToServer()
+{
+    QString content = contentEdit->toPlainText();
+    QJsonObject json;
+    json.insert("userName", userName);
+    json.insert("contentType", "text");
+    json.insert("content", content);
+    QJsonDocument document;
+    document.setObject(json);
+    clientSocket->write(document.toJson());
 }

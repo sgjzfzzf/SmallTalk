@@ -3,12 +3,15 @@
 
 #include <QDialog>
 #include <QTcpSocket>
+#include <QMenu>
+#include <QMenuBar>
 #include <QLabel>
 #include <QListWidget>
 #include <QTextEdit>
 #include <QPushButton>
 #include <QLineEdit>
 #include <QGridLayout>
+#include "connectdialog.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui
@@ -26,32 +29,31 @@ public:
     ~SmallTalkClient();
 
 public slots:
-    void sendDataToServer();
-    void chooseFile();
-    void sendFile();
-    void connectOrDisconnectToServer();
+    void connectActionTriggered();
+    void disconnectActionTriggered();
+    void connectToServer(QString, int, QString);
     void disconnectToServer();
     void updateClient();
+    void sendFile();
+    void sendImg();
+    void sendDataToServer();
 
 private:
     const int BLOCK_SIZE = 0x10000;
     const QString FLAG_RECEIVE = "Receive json.";
     Ui::SmallTalkClient *ui;
+    QString userName;
     QTcpSocket *clientSocket;
+    QMenuBar *menuBar;
+    QMenu *connectMenu;
+    QMenu *fileMenu;
+    QAction *connectAction;
+    QAction *disconnectAction;
+    QAction *fileSendAction;
+    QAction *imgSendAction;
     QListWidget *contentListWidget;
     QTextEdit *contentEdit;
     QPushButton *contentSendBtn;
-    QLabel *fileNameLabel;
-    QPushButton *fileChooseBtn;
-    QPushButton *fileSendBtn;
-    QLabel *addressLabel;
-    QLineEdit *addressEdit;
-    QLabel *portLabel;
-    QLineEdit *portEdit;
-    QPushButton *connectBtn;
-    QLabel *userNameLabel;
-    QLineEdit *userNameEdit;
-    QString userName;
     QGridLayout *mainLayout;
 };
 #endif // SMALLTALKCLIENT_H
