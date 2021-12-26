@@ -72,17 +72,17 @@ source:.
 
 #### 启动服务端和客户端
 
-![](img\server1.jpg)
+![](./img/server1.jpg)
 
 打开服务端，输入端口号8000（可自由选择空闲的端口号），点击创建即可成功运行一个聊天室。
 
-![](img\client1.jpg)
+![](./img/client1.jpg)
 
-![](img\client2.jpg)
+![](./img/client2.jpg)
 
 打开两个客户端，输入服务器地址127.0.0.1（或者其他服务器地址），端口号8000，选择一个用户名，点击连接到服务器即可成功连接。此时服务器会进行有用户进入的提示。
 
-![](img\server2.jpg)
+![](./img/server2.jpg)
 
 提示如上，标志着两名用户成功进入聊天室。
 
@@ -90,9 +90,9 @@ source:.
 
 打开Alice客户端，输入任意信息并点击发送按钮
 
-![](img\chat1.jpg)
+![](./img/chat1.jpg)
 
-![](img\chat2.jpg)
+![](./img/chat2.jpg)
 
 发送方、接收方、服务器都成功收到了发送出的消息
 
@@ -100,15 +100,15 @@ source:.
 
 打开Alice客户端，选择发送文件并随意选择一张图片
 
-![](img\sendfile1.jpg)
+![](./img/sendfile1.jpg)
 
 Bob客户端成功收取到文件，界面提示如下
 
-![](img\sendfile2.jpg)
+![](./img/sendfile2.jpg)
 
 进入客户端工作目录，打开doc文件夹
 
-![](img\sendfile3.jpg)
+![](./img/sendfile3.jpg)
 
 观察到文件成功出现在其中。
 
@@ -120,15 +120,15 @@ Bob客户端成功收取到文件，界面提示如下
 
 打开Alice客户端，选择发送本地表情
 
-![](img\sendimg1.jpg)
+![](./img/sendimg1.jpg)
 
 选择一张图片进行发送，在Bob客户端收到对应的消息
 
-![](img\sendimg2.jpg)
+![](./img/sendimg2.jpg)
 
 同时服务端也成功接收
 
-![](img\sendimg3.jpg)
+![](./img/sendimg3.jpg)
 
 由于gif无法通过截图展示，故此处不进行单独演示。
 
@@ -138,11 +138,11 @@ Bob客户端成功收取到文件，界面提示如下
 
 打开Alice客户端连接下的用户列表
 
-![](img\userlist1.jpg)
+![](./img/userlist1.jpg)
 
 收到如下讯息
 
-![](img\userlist2.jpg)
+![](./img/userlist2.jpg)
 
 当前聊天室所有在线用户均被展示出来。
 
